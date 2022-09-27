@@ -48,11 +48,13 @@ context: The Class has a WebdriverWait of 20 secs
 
 ### Waiting for SELJECTS (Selenium Objects)
 Important to remember that if not found it will return a 0
+
 If multiple = True it will use the xpath and get a list.
+
 Or else by default the search will be for one object
 
-There definitely will be cases that go out of this scope. Not planning to include a function for all of them as these two 
-modes will accomodate most cases. (use selenium directly when those cases happen)
+There definitely will be cases that go out of this scope. 
+Not planning to include a function for all of them as these two modes will accomodate most cases. (use selenium directly when those cases happen)
 
 
 ### A LOT MORE...
