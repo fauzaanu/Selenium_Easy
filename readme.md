@@ -36,23 +36,27 @@ to generate the Xpath for ```<h1 class="heading-text anotherclass">heading</h1>`
 
 but this is not enough as there is one more class present for the class attribute,
 so we should do:
+
 ```heading_text = example.xpath_by_attribute_adder(heading_text,"class","heading-text")```
 
 context: In any adder function we have to pass another xpath to add to. Also important that adding to your custom
 xpaths may not work as intended because the adder functions will try to remove the "]" by default.
 
 xpath generators will return xpaths, not selenium objects. so we need one more step to get that.
+
 ```heading_selject = example.wait_for_selject(heading_text)```
 
 context: The Class has a WebdriverWait of 20 secs
 
 ### Waiting for SELJECTS (Selenium Objects)
 Important to remember that if not found it will return a 0
+
 If multiple = True it will use the xpath and get a list.
+
 Or else by default the search will be for one object
 
-There definitely will be cases that go out of this scope. Not planning to include a function for all of them as these two 
-modes will accomodate most cases. (use selenium directly when those cases happen)
+There definitely will be cases that go out of this scope. 
+Not planning to include a function for all of them as these two modes will accomodate most cases. (use selenium directly when those cases happen)
 
 
 ### A LOT MORE...
