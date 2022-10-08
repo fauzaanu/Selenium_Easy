@@ -30,14 +30,15 @@ class Session:
             pass
 
     def __init__(self, browser_path, browser_profile_path="", use_proxy=False, ignored_exceptions=TimeoutException,
-                 delay=10, headless=False, incognito=False, forceshutdown=False, proxy=""):
+                 delay=10, headless=False, incognito=False, proxy="", debug=False):
         self.wait = None
         self.driver = None
-        self.ignored_x = ignored_exceptions
+        self.ignored_x = [ignored_exceptions]
         self.driver_path = self.drivers_check()
         self.delay = delay
         self.last_status = 1
         self.cookies = None
+        self.debug = debug
 
         # self.brave_path = "C:/Program Files/BraveSoftware/Brave-Browser/Application/brave.exe"
         # self.brave_profile = 'C:/Users/Fauzaanu/AppData/Local/BraveSoftware/Brave-Browser/User Data/'
@@ -73,17 +74,6 @@ class Session:
         self.options.add_experimental_option("excludeSwitches", ["enable-logging"])
         self.options.binary_location = self.brave_path
 
-        # not recommended to turn on unless necessary
-        if forceshutdown:
-            PROCNAME = Path(browser_path).stem
-
-            for proc in psutil.process_iter():
-
-                # check whether the process name matches
-                if proc.name() == PROCNAME:
-                    print("Killing", proc.name())
-                    proc.kill()
-            time.sleep(1)
 
         # start the driver
         # if proxy doesn't work, the main code should be able to call close_driver() and then call start driver after
@@ -95,7 +85,12 @@ class Session:
         Closes the Selenium Driver
         :return:
         """
-        self.driver.quit()
+        x = self.driver.quit()
+
+        if self.debug:
+            print(x)
+
+
 
     def start_driver(self):
         """
@@ -105,7 +100,7 @@ class Session:
         self.driver = webdriver.Chrome(executable_path=self.driver_path, desired_capabilities=self.capabilities,
                                        options=self.options, )
         self.wait = WebDriverWait(self.driver, 20, ignored_exceptions=self.ignored_x)
-        self.driver.set_window_size(width=1920, height=1080)  # todo: start maximized
+        self.driver.maximize_window()
 
     def browse(self, url):
         """
@@ -113,7 +108,12 @@ class Session:
         :param url:
         :return:
         """
-        self.driver.get(url)
+        # sleep for the delay secs
+        time.sleep(self.delay)
+        x = self.driver.get(url)
+
+        if self.debug:
+            print(x)
 
     def save_cookies(self, ):
         """
