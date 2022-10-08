@@ -40,10 +40,13 @@ class Session:
         self.cookies = None
         self.debug = debug
 
-        # self.brave_path = "C:/Program Files/BraveSoftware/Brave-Browser/Application/brave.exe"
-        # self.brave_profile = 'C:/Users/Fauzaanu/AppData/Local/BraveSoftware/Brave-Browser/User Data/'
         self.brave_path = browser_path
-        self.brave_profile = browser_profile_path
+
+        get_profile_name = browser_profile_path.find(r"User Data")
+
+        self.profile_name = browser_profile_path[get_profile_name + 10:]
+        self.profiles_dir = browser_profile_path[:get_profile_name + 10]
+
         self.capabilities = webdriver.DesiredCapabilities.CHROME
         self.options = webdriver.ChromeOptions()
 
@@ -62,18 +65,19 @@ class Session:
                     "Proxy was set to true however a proxy was not provided. Proxy not added(eg: pass proxy=45.66.238.4:8800")
 
         if browser_profile_path != "":
-            self.options.add_argument(f"user-data-dir={self.brave_profile}")
+            self.options.add_argument(f"user-data-dir={self.profiles_dir}")
+            self.options.add_argument(f'--profile-directory={self.profile_name}')
 
         if headless:
             self.options.add_argument(f"--headless")
-            self.options.add_argument(f"user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36")
+            self.options.add_argument(
+                f"user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36")
 
         if incognito:
             self.options.add_argument(f"--incognito")
 
         self.options.add_experimental_option("excludeSwitches", ["enable-logging"])
         self.options.binary_location = self.brave_path
-
 
         # start the driver
         # if proxy doesn't work, the main code should be able to call close_driver() and then call start driver after
@@ -89,8 +93,6 @@ class Session:
 
         if self.debug:
             print(x)
-
-
 
     def start_driver(self):
         """
