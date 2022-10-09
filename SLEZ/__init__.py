@@ -1,6 +1,6 @@
 import time
 from selenium import webdriver
-from selenium.common.exceptions import TimeoutException, InvalidArgumentException
+from selenium.common.exceptions import TimeoutException, InvalidArgumentException, WebDriverException
 from selenium.webdriver import Proxy, ActionChains, Keys
 from selenium.webdriver.common import proxy
 from selenium.webdriver.common.by import By
@@ -14,17 +14,9 @@ import re
 
 class Session:
     def __del__(self):
-        try:
+        if self.driver is not None:
             self.driver.quit()
-
-            # try statement used because why is an error happening here??????
-
-        except ImportError:
-            pass
-
-        except Exception as e:
-            self.driver.quit()
-            print(e)
+        return -1
 
     def __init__(self, browser_path, browser_profile_path="", ignored_exceptions=TimeoutException,
                  delay=10, headless=False, incognito=False, debug=False):
@@ -70,12 +62,32 @@ class Session:
         # setting up a new proxy. Not necessary for class to handle multiple proxy at once
         # self.start_driver()
 
+    # # Functions for closing and opening the driver # #
+
+    def drivers_check(self):
+        """
+        Using pyderman to return the path as a function..
+        :return:
+        """
+        path = driver.install(browser=driver.chrome)
+        return path
+
+        # #moving the chromedriver file to the base location
+        # dir = os.listdir(f"lib{os.sep}")
+        # if len(dir) == 1:
+        #     os.remove()
+        #     os.rename(f"lib{os.sep}{dir[0]}", "chromedriver.exe")
+
     def close_driver(self):
         """
         Closes the Selenium Driver
         :return:
         """
-        x = self.driver.quit()
+        try:
+            x = self.driver.quit()
+        except AttributeError:
+            print("Closing Failed! Ignore this error!")
+            return -1
 
         if self.debug:
             print(x)
@@ -85,11 +97,20 @@ class Session:
         Starts a selenium Driver
         :return:
         """
-        self.driver = webdriver.Chrome(executable_path=self.driver_path, desired_capabilities=self.capabilities,
-                                       options=self.options, )
-        self.wait = WebDriverWait(self.driver, 20, ignored_exceptions=self.ignored_x)
-        self.driver.maximize_window()
+        try:
+            self.driver = webdriver.Chrome(executable_path=self.driver_path, desired_capabilities=self.capabilities,
+                                           options=self.options, )
 
+            self.wait = WebDriverWait(self.driver, 20, ignored_exceptions=self.ignored_x)
+            self.driver.maximize_window()
+            print(self.driver)
+        except WebDriverException:
+            print("Error: Driver Initialization Failed! Make sure to Close any already running instances!")
+            return -1
+        if self.driver is None:
+            print("Error: Driver Initialization Failed! Make sure to Close any already running instances!")
+
+    # # Browse, Back, Forward # #
     def browse(self, url):
         """
         Browses to a URL
@@ -98,11 +119,26 @@ class Session:
         """
         # sleep for the delay secs
         time.sleep(self.delay)
-        x = self.driver.get(url)
+        if self.driver != None:
+            x = self.driver.get(url)
+        else:
+            print("Error: Driver Not Running!")
 
-        if self.debug:
-            print(x)
+    def go_forward(self):
+        """
+        Go Forward button browser
+        :return:
+        """
+        self.driver.forward()
 
+    def go_back(self):
+        """
+        Back button browser
+        :return:
+        """
+        self.driver.back()
+
+    # # Cookies # #
     def save_cookies(self, ):
         """
         Saves all the current cookies to self.cookies
@@ -118,13 +154,7 @@ class Session:
         """
         self.driver.add_cookie(cookies)
 
-    def go_forward(self):
-        """
-        Go Forward button browser
-        :return:
-        """
-        self.driver.forward()
-
+    # # Screen Shots # #
     def screenshot(self, name):
         """
         Takes a  screenshot of the screen
@@ -142,6 +172,7 @@ class Session:
         for i in range(0, frames):
             self.driver.save_screenshot(f"frame{i}.png")
 
+    # # Switching Tabs # #
     def SwitchToTab(self, title_contains):
         """
         :param title_contains: A piece of text that the title contains that other tabs will not contains. (All handles are looped. First to be found will be returned"
@@ -173,26 +204,7 @@ class Session:
 
         self.driver.switch_to.window(current_handle)
 
-    def go_back(self):
-        """
-        Back button browser
-        :return:
-        """
-        self.driver.back()
-
-    def drivers_check(self):
-        """
-        Using pyderman to return the path as a function..
-        :return:
-        """
-        path = driver.install(browser=driver.chrome)
-        return path
-
-        # #moving the chromedriver file to the base location
-        # dir = os.listdir(f"lib{os.sep}")
-        # if len(dir) == 1:
-        #     os.remove()
-        #     os.rename(f"lib{os.sep}{dir[0]}", "chromedriver.exe")
+    # # UX INTERACTIONS # #
 
     def wait_for_selject(self, xpath, multiple=False, verbose=False):
         """
@@ -336,11 +348,12 @@ class ProxSession(Session):
 
 
 class SLEZSession(Session):
-    def __init__(self, proxy_address: str, browser_path, browser_profile_path="", ignored_exceptions=TimeoutException,
+    def __init__(self, browser_path, browser_profile_path="", ignored_exceptions=TimeoutException,
                  delay=10, headless=False, incognito=False, debug=False):
-        super(ProxSession, self).__init__(browser_path, browser_profile_path=browser_profile_path,
+        super(SLEZSession, self).__init__(browser_path, browser_profile_path=browser_profile_path,
                                           ignored_exceptions=ignored_exceptions,
                                           delay=delay, headless=headless, incognito=incognito, debug=debug)
+
         self.start_driver()
 
 
