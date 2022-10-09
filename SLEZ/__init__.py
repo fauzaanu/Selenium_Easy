@@ -1,16 +1,13 @@
-import os
 import time
-from pathlib import Path
-
 from selenium import webdriver
 from selenium.common.exceptions import TimeoutException, InvalidArgumentException
 from selenium.webdriver import Proxy, ActionChains, Keys
+from selenium.webdriver.common import proxy
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.proxy import ProxyType
 import pyderman as driver
 from selenium.webdriver.support import expected_conditions
 from selenium.webdriver.support.wait import WebDriverWait
-import psutil
 from bs4 import BeautifulSoup
 import re
 
@@ -25,12 +22,12 @@ class Session:
         except ImportError:
             pass
 
-        except:
+        except Exception as e:
             self.driver.quit()
-            pass
+            print(e)
 
-    def __init__(self, browser_path, browser_profile_path="", use_proxy=False, ignored_exceptions=TimeoutException,
-                 delay=10, headless=False, incognito=False, proxy="", debug=False):
+    def __init__(self, browser_path, browser_profile_path="", ignored_exceptions=TimeoutException,
+                 delay=10, headless=False, incognito=False, debug=False):
         self.wait = None
         self.driver = None
         self.ignored_x = [ignored_exceptions]
@@ -47,22 +44,11 @@ class Session:
         self.profile_name = browser_profile_path[get_profile_name + 10:]
         self.profiles_dir = browser_profile_path[:get_profile_name + 10]
 
+        print("self.profiles_dir", self.profiles_dir)
+        print("self.profile_name", self.profile_name)
+
         self.capabilities = webdriver.DesiredCapabilities.CHROME
         self.options = webdriver.ChromeOptions()
-
-        if use_proxy:
-            if len(proxy) > 5:
-                prox = Proxy()
-                prox.proxy_type = ProxyType.MANUAL
-                prox.http_proxy = proxy
-                prox.socks_proxy = ""
-                prox.ssl_proxy = proxy
-
-                # adding the proxy as a capabilty of chrome
-                prox.add_to_capabilities(self.capabilities)
-            else:
-                print(
-                    "Proxy was set to true however a proxy was not provided. Proxy not added(eg: pass proxy=45.66.238.4:8800")
 
         if browser_profile_path != "":
             self.options.add_argument(f"user-data-dir={self.profiles_dir}")
@@ -82,7 +68,7 @@ class Session:
         # start the driver
         # if proxy doesn't work, the main code should be able to call close_driver() and then call start driver after
         # setting up a new proxy. Not necessary for class to handle multiple proxy at once
-        self.start_driver()
+        # self.start_driver()
 
     def close_driver(self):
         """
@@ -234,69 +220,6 @@ class Session:
             self.last_status = 0
             return 0
 
-    def xpath_by_attribute_adder_text(self, xpath, text_value):
-        """
-        adds a text (innerhtml) to an existing xpath
-        :param xpath:
-        :param text_value:
-        :return:
-        """
-        # remove the closing brance
-        xpath = xpath.replace("]", " and ")
-        repeating_portion = f"contains(text(),'{text_value}')"
-
-        # add the
-        xpath = xpath + repeating_portion + "]"
-
-        return xpath
-
-    def xpath_by_attribute_adder(self, xpath, attribbute, attribute_value):
-        """
-        adds any attribute to an xpath
-        :param xpath:
-        :param attribbute:
-        :param attribute_value:
-        :return:
-        """
-        # remove the closing brance
-        xpath = xpath.replace("]", " and ")
-        repeating_portion = f"contains(@{attribbute} ,'{attribute_value}')"
-
-        # add the
-        xpath = xpath + repeating_portion + "]"
-
-        return xpath
-
-    def xpath_by_attribute(self, element, attribbute, attribute_value):
-        """
-        A function to automatically generate xpath for a specefic element by 1 class
-        :param attribbute: eg: class for <div class="class1">
-        :param element: eg: div for <div class="class1">
-        :param attribute_value: eg: 'class1' for <div class="class1">
-        :return: returns an xpath for finding the element (0 on error)
-        """
-
-        xpath = f"//{element}["
-
-        xpath = xpath + f"contains(@{attribbute} ,'{attribute_value}')]"
-
-        return xpath
-
-    def xpath_by_text(self, element, text_value):
-        """
-        A function to automatically generate xpath for a specefic element by 1 class
-        :param attribbute: eg: class for <div class="class1">
-        :param element: eg: div for <div class="class1">
-        :param attribute_value: eg: 'class1' for <div class="class1">
-        :return: returns an xpath for finding the element (0 on error)
-        """
-
-        xpath = f"//{element}["
-
-        xpath = xpath + f"contains(text(),'{text_value}')]"
-
-        return xpath
-
     def click_element(self, selenium_object, sleep=10):
         """
         actions chain click element
@@ -399,3 +322,88 @@ class Session:
         for i in range(0, amount):
             bunch_of_downs.send_keys(Keys.PAGE_DOWN)
         bunch_of_downs.pause(1).perform()
+
+
+class ProxSession(Session):
+    def __init__(self, proxy_address: str, browser_path, browser_profile_path="", ignored_exceptions=TimeoutException,
+                 delay=10, headless=False, incognito=False, debug=False):
+        super(ProxSession, self).__init__(browser_path, browser_profile_path=browser_profile_path,
+                                          ignored_exceptions=ignored_exceptions,
+                                          delay=delay, headless=headless, incognito=incognito, debug=debug)
+
+        self.options.add_argument(f'--proxy-server={proxy_address}')
+        self.start_driver()
+
+
+class SLEZSession(Session):
+    def __init__(self, proxy_address: str, browser_path, browser_profile_path="", ignored_exceptions=TimeoutException,
+                 delay=10, headless=False, incognito=False, debug=False):
+        super(ProxSession, self).__init__(browser_path, browser_profile_path=browser_profile_path,
+                                          ignored_exceptions=ignored_exceptions,
+                                          delay=delay, headless=headless, incognito=incognito, debug=debug)
+        self.start_driver()
+
+
+class XpathHelpers:
+    def xpath_by_attribute_adder_text(self, xpath, text_value):
+        """
+        adds a text (innerhtml) to an existing xpath
+        :param xpath:
+        :param text_value:
+        :return:
+        """
+        # remove the closing brance
+        xpath = xpath.replace("]", " and ")
+        repeating_portion = f"contains(text(),'{text_value}')"
+
+        # add the
+        xpath = xpath + repeating_portion + "]"
+
+        return xpath
+
+    def xpath_by_attribute_adder(self, xpath, attribbute, attribute_value):
+        """
+        adds any attribute to an xpath
+        :param xpath:
+        :param attribbute:
+        :param attribute_value:
+        :return:
+        """
+        # remove the closing brance
+        xpath = xpath.replace("]", " and ")
+        repeating_portion = f"contains(@{attribbute} ,'{attribute_value}')"
+
+        # add the
+        xpath = xpath + repeating_portion + "]"
+
+        return xpath
+
+    def xpath_by_attribute(self, element, attribbute, attribute_value):
+        """
+        A function to automatically generate xpath for a specefic element by 1 class
+        :param attribbute: eg: class for <div class="class1">
+        :param element: eg: div for <div class="class1">
+        :param attribute_value: eg: 'class1' for <div class="class1">
+        :return: returns an xpath for finding the element (0 on error)
+        """
+
+        xpath = f"//{element}["
+
+        xpath = xpath + f"contains(@{attribbute} ,'{attribute_value}')]"
+
+        return xpath
+
+    def xpath_by_text(self, element, text_value):
+        """
+        A function to automatically generate xpath for a specefic element by 1 class
+        :param attribbute: eg: class for <div class="class1">
+        :param element: eg: div for <div class="class1">
+        :param attribute_value: eg: 'class1' for <div class="class1">
+        :return: returns an xpath for finding the element (0 on error)
+        """
+
+        xpath = f"//{element}["
+
+        xpath = xpath + f"contains(text(),'{text_value}')]"
+
+        return xpath
