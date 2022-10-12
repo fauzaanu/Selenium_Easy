@@ -1,15 +1,21 @@
+import json
+import os
+import pprint
+import re
 import time
-from selenium import webdriver
-from selenium.common.exceptions import TimeoutException, InvalidArgumentException, WebDriverException
-from selenium.webdriver import Proxy, ActionChains, Keys
-from selenium.webdriver.common import proxy
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.proxy import ProxyType
+import webbrowser
+from subprocess import Popen, STDOUT
+
 import pyderman as driver
+from bs4 import BeautifulSoup
+from selenium import webdriver
+from selenium.common.exceptions import TimeoutException, WebDriverException, \
+    InvalidSelectorException
+from selenium.webdriver import ActionChains, Keys
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions
 from selenium.webdriver.support.wait import WebDriverWait
-from bs4 import BeautifulSoup
-import re
 
 
 class Session:
@@ -36,15 +42,19 @@ class Session:
         self.profile_name = browser_profile_path[get_profile_name + 10:]
         self.profiles_dir = browser_profile_path[:get_profile_name + 10]
 
-        print("self.profiles_dir", self.profiles_dir)
-        print("self.profile_name", self.profile_name)
+        # print("self.profiles_dir", self.profiles_dir)
+        # print("self.profile_name", self.profile_name)
 
         self.capabilities = webdriver.DesiredCapabilities.CHROME
+        self.capabilities["goog:loggingPrefs"] = {"performance": "ALL"}
         self.options = webdriver.ChromeOptions()
+        self.rundir = os.getcwd()
+        print(self.rundir)
 
         if browser_profile_path != "":
             self.options.add_argument(f"user-data-dir={self.profiles_dir}")
             self.options.add_argument(f'--profile-directory={self.profile_name}')
+            self.options.add_argument(f'--log-net-log={self.rundir}{os.sep}network.json')
 
         if headless:
             self.options.add_argument(f"--headless")
@@ -63,6 +73,77 @@ class Session:
         # self.start_driver()
 
     # # Functions for closing and opening the driver # #
+    def cf_detect(self):
+        print("Checking if cloudflare is happening!")
+        source = self.driver.page_source
+
+    def log_network(self):
+        """
+        generates a network_log.txt file to observe what has happened
+        HUGE THANKS TO https://www.rkengler.com/how-to-capture-network-traffic-when-scraping-with-selenium-and-python/
+        """
+
+        def process_browser_logs_for_network_events(logs):
+            for entry in logs:
+                log = json.loads(entry["message"])["message"]
+                if (
+                        "Network.response" in log["method"]
+                        or "Network.request" in log["method"]
+                        or "Network.webSocket" in log["method"]
+                ):
+                    yield log
+
+        logs = self.driver.get_log("performance")
+        # events = process_browser_logs_for_network_events(logs)
+        with open("get_requests.txt", "wt") as out:
+            for log in logs:
+                if '"method":"GET"' in log["message"]:
+                    if 'cloudflare' in log["message"]:
+                        continue
+                    else:
+                        pprint.pprint(log["message"], stream=out)
+                        pprint.pprint("-------------", stream=out)
+
+        with open("post_requests.txt", "wt") as out:
+            for log in logs:
+                if '"method":"POST"' in log["message"]:
+                    if 'cloudflare' in log["message"]:
+                        continue
+                    else:
+                        pprint.pprint(log["message"], stream=out)
+                        pprint.pprint("-------------", stream=out)
+
+        with open("json_networks.txt", "wt") as out:
+            for log in logs:
+                if 'application/json' in log["message"]:
+                    if 'cloudflare' in log["message"]:
+                        continue
+                    else:
+                        pprint.pprint(log["message"], stream=out)
+                        pprint.pprint("-------------", stream=out)
+
+        with open("xhr_network.txt", "wt") as out:
+            for log in logs:
+                if '"type":"XHR"' in log["message"]:
+                    if 'cloudflare' in log["message"]:
+                        continue
+                    else:
+                        pprint.pprint(log["message"], stream=out)
+                        pprint.pprint("-------------", stream=out)
+
+        with open("tokens.txt", "wt") as out:
+            for log in logs:
+                if 'TOKEN' in log["message"]:
+                    if 'cloudflare' in log["message"]:
+                        continue
+                    else:
+                        pprint.pprint(log["message"], stream=out)
+                        pprint.pprint("-------------", stream=out)
+
+        with open("get_requests.txt", "wt") as out:
+            for log in logs:
+                pprint.pprint(log["message"], stream=out)
+                pprint.pprint("-------------", stream=out)
 
     def drivers_check(self):
         """
@@ -83,11 +164,8 @@ class Session:
         Closes the Selenium Driver
         :return:
         """
-        try:
-            x = self.driver.quit()
-        except AttributeError:
-            print("Closing Failed! Ignore this error!")
-            return -1
+
+        x = self.driver.quit()
 
         if self.debug:
             print(x)
@@ -98,15 +176,16 @@ class Session:
         :return:
         """
         try:
-            self.driver = webdriver.Chrome(executable_path=self.driver_path, desired_capabilities=self.capabilities,
-                                           options=self.options, )
+            AServiceOBJ = Service(executable_path=self.driver_path, port=20)
+            self.driver = webdriver.Chrome(service=AServiceOBJ, desired_capabilities=self.capabilities,
+                                           options=self.options)
 
             self.wait = WebDriverWait(self.driver, 20, ignored_exceptions=self.ignored_x)
             self.driver.maximize_window()
-            print(self.driver)
+            # print(self.driver)
         except WebDriverException:
-            print("Error: Driver Initialization Failed! Make sure to Close any already running instances!")
-            return -1
+            raise
+            # return -1
         if self.driver is None:
             print("Error: Driver Initialization Failed! Make sure to Close any already running instances!")
 
@@ -119,7 +198,7 @@ class Session:
         """
         # sleep for the delay secs
         time.sleep(self.delay)
-        if self.driver != None:
+        if self.driver is not None:
             x = self.driver.get(url)
         else:
             print("Error: Driver Not Running!")
@@ -172,6 +251,14 @@ class Session:
         for i in range(0, frames):
             self.driver.save_screenshot(f"frame{i}.png")
 
+    def set_location(self, lat: float, long: float, acc: int):
+        map_coordinates = dict({
+            "latitude": lat,
+            "longitude": long,
+            "accuracy": acc
+        })
+        self.driver.execute_cdp_cmd("Emulation.setGeolocationOverride", map_coordinates)
+
     # # Switching Tabs # #
     def SwitchToTab(self, title_contains):
         """
@@ -206,31 +293,62 @@ class Session:
 
     # # UX INTERACTIONS # #
 
+    def hidden_selject(self, xpath):
+        """
+        waits for an xpath to be found. if not found returns 0
+        :param xpath: The xpath to be searched for
+        :return: returns 0 on not found, the selenium object on true
+        """
+
+        element = "NOTFOUND"
+        try:
+            element = self.wait.until(expected_conditions.presence_of_element_located((By.XPATH, xpath)))
+
+        except InvalidSelectorException:
+            raise
+
+        except TimeoutException:
+            raise
+
+        if element == "NOTFOUND":
+            print("Unable to locate element - trying to understand why!")
+            ## call cloudflare checker from here
+
+        # print(element)
+        return element
+
     def wait_for_selject(self, xpath, multiple=False, verbose=False):
         """
         waits for an xpath to be found. if not found returns 0
         :param xpath: The xpath to be searched for
         :return: returns 0 on not found, the selenium object on true
         """
+
+        element = "NOTFOUND"
         try:
-            element = 0
             if verbose:
                 print("looking for", xpath)
             if not multiple:
                 element = self.wait.until(expected_conditions.visibility_of_element_located((By.XPATH, xpath)))
+                if verbose:
+                    print(element)
             elif multiple:
                 element = self.wait.until(expected_conditions.presence_of_all_elements_located((By.XPATH, xpath)))
+                if verbose:
+                    print(element)
 
-            if element == 0:
-                print("Element not found:", xpath)
-                self.driver.quit()
-            else:
-                # print(element)
-                return element
+        except InvalidSelectorException:
+            raise
 
-        except:
-            self.last_status = 0
-            return 0
+        except TimeoutException:
+            raise
+
+        if element == "NOTFOUND":
+            print("Unable to locate element - trying to understand why!")
+            ## call cloudflare checker from here
+
+        # print(element)
+        return element
 
     def click_element(self, selenium_object, sleep=10):
         """
@@ -353,8 +471,26 @@ class SLEZSession(Session):
         super(SLEZSession, self).__init__(browser_path, browser_profile_path=browser_profile_path,
                                           ignored_exceptions=ignored_exceptions,
                                           delay=delay, headless=headless, incognito=incognito, debug=debug)
-
+        # print(browser_profile_path)
         self.start_driver()
+        # print(self.driver)
+        # print(self.wait)
+
+class HumanBrowser:
+    def __init__(self, browser_path, browser_profile_path):
+        self.brave_path = str(browser_path).replace(os.sep, "/")
+
+        get_profile_name = browser_profile_path.find(r"User Data")
+
+        self.profile_name = browser_profile_path[get_profile_name + 10:]
+        self.profiles_dir = browser_profile_path[:get_profile_name + 10]
+        self.profiles_dir = str(self.profiles_dir).replace(r"\\",r"\\\\")
+
+        self.rundir = os.getcwd()
+
+    def browse(self, url):
+        x = [rf"""{self.brave_path}""", rf"""{url}""",  rf"""--profile-directory={self.profile_name}""",  rf"""--log-net-log={self.rundir}/human.json"""]
+        Popen(x, stdout=os.open(os.devnull, os.O_RDWR), stderr=STDOUT)
 
 
 class XpathHelpers:
