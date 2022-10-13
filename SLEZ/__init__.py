@@ -1,18 +1,26 @@
 import json
 import os
+import pathlib
 import pprint
 import re
+import shutil
 import time
+import uuid
 import webbrowser
+import xml.etree.ElementTree as ET
 from subprocess import Popen, STDOUT
 
 import pyderman as driver
+from PIL import ImageDraw, Image
 from bs4 import BeautifulSoup
+from pyscreeze import locate
 from selenium import webdriver
 from selenium.common.exceptions import TimeoutException, WebDriverException, \
     InvalidSelectorException
 from selenium.webdriver import ActionChains, Keys
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.actions.action_builder import ActionBuilder
+from selenium.webdriver.common.actions.pointer_actions import PointerActions
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions
 from selenium.webdriver.support.wait import WebDriverWait
@@ -182,6 +190,8 @@ class Session:
 
             self.wait = WebDriverWait(self.driver, 20, ignored_exceptions=self.ignored_x)
             self.driver.maximize_window()
+            self.driver.set_window_position(0, 0)
+
             # print(self.driver)
         except WebDriverException:
             raise
@@ -202,6 +212,9 @@ class Session:
             x = self.driver.get(url)
         else:
             print("Error: Driver Not Running!")
+
+    def browser_resolution(self, width, height):
+        self.driver.set_window_size(width, height)
 
     def go_forward(self):
         """
@@ -240,7 +253,7 @@ class Session:
         :param name:
         :return:
         """
-        self.driver.save_screenshot("image.png")
+        self.driver.save_screenshot(f"{name}.png")
 
     def screenrec(self, frames=30):
         """
@@ -476,6 +489,7 @@ class SLEZSession(Session):
         # print(self.driver)
         # print(self.wait)
 
+
 class HumanBrowser:
     def __init__(self, browser_path, browser_profile_path):
         self.brave_path = str(browser_path).replace(os.sep, "/")
@@ -484,12 +498,13 @@ class HumanBrowser:
 
         self.profile_name = browser_profile_path[get_profile_name + 10:]
         self.profiles_dir = browser_profile_path[:get_profile_name + 10]
-        self.profiles_dir = str(self.profiles_dir).replace(r"\\",r"\\\\")
+        self.profiles_dir = str(self.profiles_dir).replace(r"\\", r"\\\\")
 
         self.rundir = os.getcwd()
 
     def browse(self, url):
-        x = [rf"""{self.brave_path}""", rf"""{url}""",  rf"""--profile-directory={self.profile_name}""",  rf"""--log-net-log={self.rundir}/human.json"""]
+        x = [rf"""{self.brave_path}""", rf"""{url}""", rf"""--profile-directory={self.profile_name}""",
+             rf"""--log-net-log={self.rundir}/human.json"""]
         Popen(x, stdout=os.open(os.devnull, os.O_RDWR), stderr=STDOUT)
 
 
@@ -556,3 +571,125 @@ class XpathHelpers:
         xpath = xpath + f"contains(text(),'{text_value}')]"
 
         return xpath
+
+
+class Actionable:
+    def __init__(self, xpath: str, instance: Session, invisible=False, single=True):
+        self.xpath = xpath
+        self.invisible = invisible
+        self.single = single
+        self.instance = instance
+        self.record_num = uuid.uuid4()
+        self.find_selenium_object()
+        self.h = 1080
+        self.w = 1920
+
+    def find_selenium_object(self, xpath=None):
+        if xpath is None:
+            xpath = self.xpath
+
+        try:
+            if self.invisible:
+                if self.single:
+                    element = self.instance.wait.until(
+                        expected_conditions.presence_of_element_located((By.XPATH, xpath)))
+                    self.generate_image_reference(element)
+
+                elif not self.single:
+                    element = self.instance.wait.until(
+                        expected_conditions.presence_of_all_elements_located((By.XPATH, xpath)))
+                    self.generate_image_reference(element)
+
+            elif not self.invisible:
+                if self.single:
+                    element = self.instance.wait.until(
+                        expected_conditions.visibility_of_element_located((By.XPATH, xpath)))
+                    self.generate_image_reference(element)
+
+                elif not self.single:
+                    element = self.instance.wait.until(
+                        expected_conditions.visibility_of_all_elements_located((By.XPATH, xpath)))
+                    self.generate_image_reference(element)
+
+        except InvalidSelectorException:
+            raise
+
+        except TimeoutException:
+            raise
+
+        if element == "NOTFOUND":
+            print("Unable to locate element - trying to understand why!")
+
+        return element
+
+    def generate_image_reference(self, selject, rec=False):
+        if rec is False:
+            selject.screenshot(f"refs/{self.record_num}.png")
+        else:
+            selject_r = selject[0]
+            id = selject[1]
+            selject_r.screenshot(f"refs/elements/{id}_.png")
+
+    def image_xpath(self, nexpath="//body/child::*[not(self::script)]", aggressive=False):
+        # //body/child::*
+        # //body//following::*
+        # //body/child::*[not(self::script)]
+        # todo: Reminder close eyes or turn off monitor ; needs a better way to handle this
+        source = self.instance.driver.page_source
+        if not aggressive:
+            nexpath = nexpath
+        else:
+            # //body//following::*[not(self::script)]
+            nexpath = "//body//following::*[not(self::script)]"
+
+        elements = self.instance.wait.until(expected_conditions.presence_of_all_elements_located((By.XPATH, nexpath)))
+        print(len(elements))
+
+        elem_id = int()
+
+        self.instance.driver.maximize_window()
+        for elem in elements:
+            # while taking the screenshot there is a lot of flickering - this will damage my eyes. So we are moving the screen out of bounds
+            self.instance.driver.set_window_position(self.h - (self.h + self.h), self.w - (self.w + self.w))
+            self.instance.browser_resolution(width=self.w, height=self.h)
+
+            elem_id += 1
+            print(elem)
+            elem = [elem, elem_id]
+            # print(elem)
+            try:
+                self.generate_image_reference(elem, rec=True)
+            except WebDriverException:
+                continue
+        # bring back to the right positions
+        self.instance.driver.set_window_position(0, 0)
+        self.instance.browser_resolution(width=self.w, height=self.h)
+        self.instance.driver.maximize_window()
+
+    def find_image_cordinates(self, ref_img):
+        # os.rename(ref_img,str(ref_img).replace("_","-"))
+        current = self.instance.driver.save_screenshot("current_screen.png")
+        cord = locate(ref_img, "current_screen.png")
+        print(cord)
+        cordinates = (cord.left, cord.top, cord.left + cord.width, cord.top + cord.height)
+        shutil.copyfile("current_screen.png", "for_marking.png")
+        source_img = Image.open("for_marking.png").convert("RGBA")
+        draw = ImageDraw.Draw(source_img)
+        draw.rectangle(cordinates, outline="red")
+        source_img.save("for_marking.png")
+
+        return cordinates
+
+    def click_cordinates(self, cordinate):
+
+        ## what i want is to move it visually, both aproaches below has failed to do it.
+
+        action = ActionBuilder(self.instance.driver)
+        action.pointer_action.move_to_location(cordinate[0], cordinate[1]).pause(2).click()
+        action.perform()
+
+        # a valid and working aproach
+        # ac = ActionChains(self.instance.driver)
+        # ac.move_by_offset(cordinate[0], cordinate[1]).pause(2)
+        # ac.click()
+        # ac.perform()
