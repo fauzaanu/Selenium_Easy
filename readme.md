@@ -1,5 +1,7 @@
 # SLEZ (Selenium Easy)
 
+[ABANDONED]
+
 ### ABOUT
 This is written to make things easy. Calling selenium functions directly is still some times needed.
 
